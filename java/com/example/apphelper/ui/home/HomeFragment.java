@@ -9,6 +9,10 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -18,6 +22,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -60,6 +65,8 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
     EditText stepTargetEditText;
     EditText waterEditText;
+    EditText sleepHEditText;
+    EditText sleepMinEditText;
 
     CardView waterCardView;
     CardView sleepCardView;
@@ -68,6 +75,14 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
     public int sleepHours;
     public int sleepMinutes;
     public String stringWaterLiters;
+
+
+
+
+    private SensorManager sensorManager;
+    private Sensor sensor;
+
+
 
 
 
@@ -97,10 +112,14 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
         workoutButton = binding.addGymWorkoutButton;
 
         waterCardView = binding.waterCard;
+        sleepCardView = binding.sleepCard;
 
 
 
         messageTextArray = new randomMessageTextArray();
+
+
+
 
 
         /**
@@ -133,6 +152,28 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
             stringWaterLiters = sharedPreferences.getString("water liters", "0");
 
         }
+
+
+
+
+        /**
+         * step counter
+         */
+        sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+        sensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+        sensorManager.registerListener( new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent event) {
+                stepNumber++;
+                preferencesEditor.putInt("step number", stepNumber);
+                preferencesEditor.commit();
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int accuracy) {
+                Log.d("MY_APP", sensor.toString() + " - " + accuracy);
+            }
+        }, sensor, SensorManager.SENSOR_DELAY_GAME );
 
 
 
@@ -179,13 +220,19 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
                             @Override
                             public void onClick(DialogInterface dialogInterface, int i) {
                                 String StringTarget = stepTargetEditText.getText().toString();
-                                stepTarget = Integer.parseInt(StringTarget);
 
-                                preferencesEditor.putInt("step target", stepTarget);
-                                preferencesEditor.commit();
+                                try{
+                                    stepTarget = Integer.parseInt(StringTarget);
 
-                                calculateStepPercentage(stepNumber);
-                                stepGoal.setText( "/" + stepTarget + " steps" );
+                                    preferencesEditor.putInt("step target", stepTarget);
+                                    preferencesEditor.commit();
+
+                                    calculateStepPercentage(stepNumber);
+                                    stepGoal.setText( "/" + stepTarget + " steps" );
+                                } catch(NumberFormatException e){
+                                    Toast.makeText(getContext(), "Invalid number!", Toast.LENGTH_SHORT).show();
+                                }
+
                             }
                         }
                 );
@@ -213,13 +260,32 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
                 builder.setPositiveButton("continue", new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialogInterface, int i) {
-                                String StringTarget = waterEditText.getText().toString();
+
+                                String StringWater = waterEditText.getText().toString();
 
 
-                                preferencesEditor.putString("water liters", StringTarget);
-                                preferencesEditor.commit();
+                                try {
+                                    double addWater = Double.parseDouble(StringWater);
+                                    double currentWater = Double.parseDouble(sharedPreferences.getString("water liters", "0"));
+                                    addWater += currentWater;
 
-                                setWaterPercentage(StringTarget);
+                                    String StringTarget = String.format("%.2f", addWater);
+
+
+                                    preferencesEditor.putString("water liters", StringTarget);
+                                    preferencesEditor.commit();
+
+                                    stringWaterLiters = StringTarget;
+
+                                    setWaterPercentage(StringTarget);
+
+                                }
+                                catch(NumberFormatException e)
+                                {
+                                    //not a double
+                                    Toast.makeText(getContext(), "Invalid number!", Toast.LENGTH_SHORT).show();
+                                }
+
                             }
                         }
                 );
@@ -227,6 +293,54 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
             }
         });
+
+
+        sleepCardView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+
+                LayoutInflater inflater = getLayoutInflater();
+                View dialoglayout = inflater.inflate(R.layout.sheet_layout_sleep, null);
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+
+                //continueButton = dialoglayout.findViewById(R.id.buttonContinue);
+                sleepHEditText = dialoglayout.findViewById(R.id.editTextSleepHours);
+                sleepMinEditText = dialoglayout.findViewById(R.id.editTextSleepMinutes);
+
+
+                builder.setView(dialoglayout);
+                builder.setPositiveButton("continue", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+
+                                try{
+                                    int sleepH = Integer.parseInt( sleepHEditText.getText().toString() );
+                                    sleepHours = sleepH;
+                                    int sleepMin = Integer.parseInt( sleepMinEditText.getText().toString() );
+                                    sleepMinutes = sleepMin;
+
+                                    preferencesEditor.putInt("sleep hours", sleepHours);
+                                    preferencesEditor.putInt("sleep minutes", sleepMinutes);
+                                    preferencesEditor.commit();
+
+                                    setSleepTime(sleepHours, sleepMinutes);
+                                } catch (NumberFormatException e){
+                                    Toast.makeText(getContext(), "Invalid number!", Toast.LENGTH_SHORT).show();
+                                }
+
+
+                            }
+                        }
+                );
+                builder.show();
+
+            }
+        });
+
+
+
 
 
         /**
@@ -364,10 +478,12 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
         // Set the alarm to start at approximately 00:00 h
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(System.currentTimeMillis());
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.HOUR_OF_DAY, 23);
+        calendar.set(Calendar.MINUTE, 59);
         //repeat alarm every 24hours
-        alarmMgr.setInexactRepeating(AlarmManager.RTC, calendar.getTimeInMillis(),
+        alarmMgr.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(),
                 AlarmManager.INTERVAL_DAY, alarmIntent);
     }
+
+
 }
