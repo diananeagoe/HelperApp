@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">AppHelper</string>
+    <string name="title_home">Home</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="set_step_target"><u>Set step target</u></string>
+    <string name="view_gym_history"><u>View history</u></string>
+</resources>
