@@ -2,18 +2,22 @@ package com.example.apphelper.ui.home;
 
 import static android.content.Context.MODE_PRIVATE;
 
+import android.Manifest;
 import android.app.AlarmManager;
 import android.app.AlertDialog;
+import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -25,23 +29,26 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.Observer;
-import androidx.lifecycle.ViewModelProvider;
 
+import com.example.apphelper.MainActivity;
 import com.example.apphelper.R;
 import com.example.apphelper.databinding.FragmentHomeBinding;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
-
-import org.w3c.dom.Text;
 
 import java.util.Calendar;
 
 public class HomeFragment extends Fragment implements BottomSheetDialogStepTarget.ShareDataInterface {
 
+    public final String CHANNEL_ID = "channel1";
+    public final String STEPS_CHANNEL_ID = "channel2";
+
+    private static final int ACTIVITY_PERMISSION_CODE = 1;
+
     private FragmentHomeBinding binding;
+    //private BottomSheetLayoutBinding b;
     public randomMessageTextArray messageTextArray;
 
     public int stepTarget;
@@ -74,7 +81,7 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
     public int stepNumber;
     public int sleepHours;
     public int sleepMinutes;
-    public String stringWaterLiters;
+    public String stringWaterLiters = "0";
 
 
 
@@ -121,7 +128,6 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
 
 
-
         /**
          * sharedPreferences
          */
@@ -157,23 +163,11 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
 
         /**
-         * step counter
+         * step counter and permission
          */
-        sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
-        sensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-        sensorManager.registerListener( new SensorEventListener() {
-            @Override
-            public void onSensorChanged(SensorEvent event) {
-                stepNumber++;
-                preferencesEditor.putInt("step number", stepNumber);
-                preferencesEditor.commit();
-            }
 
-            @Override
-            public void onAccuracyChanged(Sensor sensor, int accuracy) {
-                Log.d("MY_APP", sensor.toString() + " - " + accuracy);
-            }
-        }, sensor, SensorManager.SENSOR_DELAY_GAME );
+        checkPermission(Manifest.permission.ACTIVITY_RECOGNITION, ACTIVITY_PERMISSION_CODE);
+
 
 
 
@@ -189,6 +183,7 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
             }
         });
+
 
         gymHistoryButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -279,6 +274,8 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
                                     setWaterPercentage(StringTarget);
 
+                                    //Log.e("water", "changed");
+
                                 }
                                 catch(NumberFormatException e)
                                 {
@@ -357,6 +354,23 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
          * reset values every 24h
          */
         alarmManagerSet();
+
+
+        /**
+         * notifications
+         */
+        notificationManagerSet();
+
+
+        /**
+         * foreground service
+         */
+
+        Intent notificationIntent = new Intent(getContext(), ForegroundService.class);
+        //notificationIntent.putExtra("context", (Parcelable) getContext());
+        getActivity().startService(notificationIntent);
+
+
 
 
 
@@ -454,6 +468,7 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
 
     public void setWaterPercentage(String stringwl){
 
+
         String StringWaterL = stringwl;
         double waterL = Double.parseDouble( StringWaterL );
         double per = waterL/(double)2.0;
@@ -467,23 +482,79 @@ public class HomeFragment extends Fragment implements BottomSheetDialogStepTarge
         waterPercentageText.setText( waterPText );
         waterProgressBar.setProgress( pWater );
 
+
+
+        //waterPercentageText.setText(stringwl);
+        //waterProgressBar.setProgress(25);
+
     }
 
     public void alarmManagerSet(){
         // intent
         AlarmManager alarmMgr = (AlarmManager)getContext().getSystemService(Context.ALARM_SERVICE);
         Intent intent = new Intent(getContext(), AlarmReceiver.class);
-        PendingIntent alarmIntent = PendingIntent.getBroadcast(getContext(), 0, intent, 0);
+        PendingIntent alarmIntent = PendingIntent.getBroadcast(getContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
         // Set the alarm to start at approximately 00:00 h
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(System.currentTimeMillis());
         calendar.set(Calendar.HOUR_OF_DAY, 23);
         calendar.set(Calendar.MINUTE, 59);
-        //repeat alarm every 24hours
+        //repeat alarm every 24 hours
         alarmMgr.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(),
                 AlarmManager.INTERVAL_DAY, alarmIntent);
     }
+
+
+    public void notificationManagerSet(){
+
+        // intent
+        AlarmManager alarmMgr = (AlarmManager)getContext().getSystemService(Context.ALARM_SERVICE);
+        Intent intent = new Intent(getContext(), NotificationsAlarmReceiver.class);
+        PendingIntent alarmIntent = PendingIntent.getBroadcast(getContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
+
+        // Set the alarm to start at a fixed hour
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(System.currentTimeMillis());
+        //calendar.set(Calendar.HOUR_OF_DAY, 9);
+        calendar.set(Calendar.MINUTE, 0);
+        //repeat alarm every 2 hours
+        alarmMgr.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(),
+                AlarmManager.INTERVAL_HOUR * 2, alarmIntent);
+    }
+
+
+
+    public void checkPermission(String permission, int requestCode) {
+        if (ContextCompat.checkSelfPermission(getContext(), permission) == PackageManager.PERMISSION_DENIED) {
+            // Requesting the permission
+            ActivityCompat.requestPermissions(getActivity(), new String[] { permission }, requestCode);
+        }
+        //else {
+            //Toast.makeText(getContext(), "Permission already granted", Toast.LENGTH_SHORT).show();
+        //}
+    }
+    
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode,
+                permissions,
+                grantResults);
+
+        if (requestCode == ACTIVITY_PERMISSION_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getContext(), "Physical Activity Permission Granted", Toast.LENGTH_SHORT).show();
+            }
+            else {
+                Toast.makeText(getContext(), "Physical Activity Permission Denied", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+    }
+
 
 
 }
